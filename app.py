@@ -91,4 +91,28 @@ while True:
         # इन द मनी जानकारी और अलर्ट्स
         if itm_strike != "N/A":
             col_a, col_b = st.columns(2)
-            col_a.success(f"🎯 *अनुशंसित इन-द-मनी (ITM) स्ट्राइक:* {in…
+            col_a.success(f"🎯 *अनुशंसित इन-द-मनी (ITM) स्ट्राइक:* {index_choice} {itm_strike}")
+            col_b.info(f"⚡ *ऑर्डर गाइड:* एंट्री लें, SL रखें {sl_points} अंक नीचे और टारगेट {calculated_target} अंक ऊपर सेट करें।")
+        
+        # कैंडलस्टिक चार्ट (सुधार - प्रोफेशनल कैंडलस्टिक पैटर्न)
+        st.subheader(f"📊 {index_choice} 5-मिनट कैंडलस्टिक चार्ट")
+        if not df.empty:
+            fig = go.Figure(data=[go.Candlestick(
+                x=df.index,
+                open=df['Open'],
+                high=df['High'],
+                low=df['Low'],
+                close=df['Close'],
+                name="Market Price"
+            )])
+            fig.update_layout(
+                theme="plotly_dark",
+                xaxis_rangeslider_visible=False,
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=500
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ लाइव मार्केट बंद है या डेटा लोड हो रहा है। (मार्केट समय: सोमवार-शुक्रवार, 9:15 AM से 3:30 PM)")
+            
+    time.sleep(5)  # हर 5 सेकंड में डेटा रिफ्रेश होगा
