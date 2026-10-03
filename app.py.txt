@@ -1,0 +1,61 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import time
+
+# पेज कॉन्फ़िगरेशन
+st.set_page_config(page_title="Insider Option Tracker", layout="wide")
+st.title("📊 Insider Option Tracker (Live Market)")
+
+# साइडबार - इंडेक्स सिलेक्शन
+index_choice = st.sidebar.selectbox("इंडेक्स चुनें:", ["NIFTY", "BANKNIFTY", "SENSEX"])
+st.sidebar.write(f"सक्रिय इंडेक्स: *{index_choice}*")
+
+# डेटा रिफ्रेश रेट
+refresh_rate = st.sidebar.slider("रिफ्रेश अंतराल (सेकंड):", 1, 10, 2)
+
+# नकली लाइव डेटा जनरेटर (यहाँ आपकी ब्रोकर API कनेक्ट होगी)
+def get_live_data():
+    current_price = round(np.random.normal(24000, 50), 2)
+    vwap = round(current_price - np.random.uniform(-10, 10), 2)
+    pcr = round(np.random.uniform(0.6, 1.6), 2)
+    return current_price, vwap, pcr
+
+# लाइव अपडेटिंग कंटेनर
+placeholder = st.empty()
+
+while True:
+    price, vwap, pcr = get_live_data()
+    
+    # इनसाइडर सेंटीमेंट और सिग्नल लॉजिक
+    if price > vwap and pcr > 1.2:
+        signal = "🟢 CALL Buy (Insider Bullish)"
+        color = "green"
+        itm_strike = round((price - 50) / 50) * 50
+    elif price < vwap and pcr < 0.8:
+        signal = "🔴 PUT Buy (Insider Bearish)"
+        color = "red"
+        itm_strike = round((price + 50) / 50) * 50
+    else:
+        signal = "🟡 HOLD (Retailers Active / Sideways)"
+        color = "orange"
+        itm_strike = "N/A"
+
+    with placeholder.container():
+        # 3 मुख्य मेट्रिक्स
+        col1, col2, col3 = st.columns(3)
+        col1.metric(label="लाइव प्राइस (LTP)", value=f"₹{price}")
+        col2.metric(label="VWAP इंडिकेटर", value=f"₹{vwap}")
+        col3.metric(label="PCR रेशियो (Insider Data)", value=pcr)
+        
+        st.markdown(f"### सिग्नल स्टेटस: <span style='color:{color}; font-weight:bold;'>{signal}</span>", unsafe_allow_html=True)
+        
+        if itm_strike != "N/A":
+            st.info(f"🎯 *अनुशंसित इन-द-मनी (ITM) स्ट्राइक:* {index_choice} {itm_strike}")
+            st.success(f"📈 *मनी मैनेजमेंट (1:5 Ratio):* यदि SL = 20 पॉइंट है, तो Target = 100 पॉइंट रखें।")
+        
+        # मार्केट का लाइव चार्ट
+        chart_data = pd.DataFrame(np.random.randn(20, 2), columns=['Price', 'VWAP'])
+        st.line_chart(chart_data)
+        
+    time.sleep(refresh_rate)
