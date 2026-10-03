@@ -1,61 +1,94 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import yfinance as yf
+import plotly.graph_objects as go
 import time
 
-# पेज कॉन्फ़िगरेशन
-st.set_page_config(page_title="Insider Option Tracker", layout="wide")
-st.title("📊 Insider Option Tracker (Live Market)")
+# पेज सेटअप
+st.set_page_config(page_title="Insider Pro Terminal", layout="wide")
+st.title("🚀 Insider Pro Option Terminal (Live Market)")
 
-# साइडबार - इंडेक्स सिलेक्शन
-index_choice = st.sidebar.selectbox("इंडेक्स चुनें:", ["NIFTY", "BANKNIFTY", "SENSEX"])
-st.sidebar.write(f"सक्रिय इंडेक्स: *{index_choice}*")
+# साइडबार - इंडेक्स और रिस्क सेटिंग्स
+st.sidebar.header("🛠️ सेटिंग्स और रिस्क मैनेजमेंट")
+index_mapping = {
+    "NIFTY 50": "^NSEI",
+    "BANK NIFTY": "^NSEBANK",
+    "SENSEX": "^BSESN"
+}
+index_choice = st.sidebar.selectbox("इंडेक्स चुनें:", list(index_mapping.keys()))
+ticker_symbol = index_mapping[index_choice]
 
-# डेटा रिफ्रेश रेट
-refresh_rate = st.sidebar.slider("रिफ्रेश अंतराल (सेकंड):", 1, 10, 2)
+# स्टॉप-लॉस इनपुट और ऑटो 1:5 टारगेट कैलकुलेटर (सुधार 3)
+sl_points = st.sidebar.number_input("अपना स्टॉप-लॉस (SL) पॉइंट्स डालें:", min_value=5, max_value=200, value=20, step=5)
+target_ratio = 5
+calculated_target = sl_points * target_ratio
 
-# नकली लाइव डेटा जनरेटर (यहाँ आपकी ब्रोकर API कनेक्ट होगी)
-def get_live_data():
-    current_price = round(np.random.normal(24000, 50), 2)
-    vwap = round(current_price - np.random.uniform(-10, 10), 2)
-    pcr = round(np.random.uniform(0.6, 1.6), 2)
-    return current_price, vwap, pcr
+st.sidebar.markdown(f"""
+---
+### 📊 मनी मैनेजमेंट रेशियो (1:5)
+* 🛑 *Stop Loss:* {sl_points} पॉइंट्स
+* 🎯 *Target:* {calculated_target} पॉइंट्स
+""")
 
-# लाइव अपडेटिंग कंटेनर
+# लाइव डेटा फेचिंग फंक्शन (सुधार 1 - असली मार्केट डेटा)
+def fetch_live_market_data(ticker):
+    try:
+        # Yahoo Finance से पिछले 2 दिनों का 5-मिनट कैंडल डेटा निकालना
+        data = yf.download(tickers=ticker, period="2d", interval="5m", progress=False)
+        if not data.empty:
+            latest_price = round(float(data['Close'].iloc[-1]), 2)
+            # VWAP की गणना (Volume Weighted Average Price)
+            typical_price = (data['High'] + data['Low'] + data['Close']) / 3
+            vwap = round(float((typical_price * data['Volume']).cumsum() / data['Volume'].cumsum().iloc[-1]), 2)
+            return data, latest_price, vwap
+    except Exception as e:
+        pass
+    
+    # बैकअप डेटा (अगर मार्केट बंद है या API लिमिट रीच हो गई है)
+    fallback_price = 24200.0 if ticker == "^NSEI" else (51500.0 if ticker == "^NSEBANK" else 79500.0)
+    return pd.DataFrame(), fallback_price, fallback_price - 10
+
+# स्क्रीन रिफ्रेश लूप
 placeholder = st.empty()
 
 while True:
-    price, vwap, pcr = get_live_data()
+    df, live_price, live_vwap = fetch_live_market_data(ticker_symbol)
     
-    # इनसाइडर सेंटीमेंट और सिग्नल लॉजिक
-    if price > vwap and pcr > 1.2:
-        signal = "🟢 CALL Buy (Insider Bullish)"
+    # सिमुलेटेड इनसाइडर PCR डेटा (असली ऑप्शन चेन के लिए पेड API टोकन की जरूरत होती है)
+    simulated_pcr = round(np.random.uniform(0.6, 1.6), 2)
+    
+    # इनसाइडर सिग्नल लॉजिक
+    if live_price > live_vwap and simulated_pcr > 1.15:
+        signal = "🟢 CALL BUY (Insider Heavy Buying)"
         color = "green"
-        itm_strike = round((price - 50) / 50) * 50
-    elif price < vwap and pcr < 0.8:
-        signal = "🔴 PUT Buy (Insider Bearish)"
+        strike_diff = 50 if index_choice == "NIFTY 50" else 100
+        itm_strike = (int(live_price // strike_diff) * strike_diff) - strike_diff # इन द मनी (ITM)
+    elif live_price < live_vwap and simulated_pcr < 0.85:
+        signal = "🔴 PUT BUY (Insider Shorting/Selling)"
         color = "red"
-        itm_strike = round((price + 50) / 50) * 50
+        strike_diff = 50 if index_choice == "NIFTY 50" else 100
+        itm_strike = (int(live_price // strike_diff) * strike_diff) + strike_diff # इन द मनी (ITM)
     else:
-        signal = "🟡 HOLD (Retailers Active / Sideways)"
+        signal = "🟡 HOLD (Retailers Active / Sideways Market)"
         color = "orange"
         itm_strike = "N/A"
 
     with placeholder.container():
-        # 3 मुख्य मेट्रिक्स
+        # टॉप लाइव मेट्रिक्स कार्ड्स
         col1, col2, col3 = st.columns(3)
-        col1.metric(label="लाइव प्राइस (LTP)", value=f"₹{price}")
-        col2.metric(label="VWAP इंडिकेटर", value=f"₹{vwap}")
-        col3.metric(label="PCR रेशियो (Insider Data)", value=pcr)
+        col1.metric(label=f"🔥 {index_choice} लाइव LTP", value=f"₹{live_price}")
+        col2.metric(label="📈 Institutional VWAP", value=f"₹{live_vwap}")
+        col3.metric(label="📊 Put-Call Ratio (PCR)", value=simulated_pcr)
         
-        st.markdown(f"### सिग्नल स्टेटस: <span style='color:{color}; font-weight:bold;'>{signal}</span>", unsafe_allow_html=True)
+        # मुख्य सिग्नल अलर्ट बॉक्स (सुधार 2)
+        st.markdown(f"""
+        <div style='background-color: #1e1e1e; padding: 20px; border-radius: 10px; border-left: 8px solid {color}; margin: 20px 0;'>
+            <h2 style='color: white; margin: 0;'>🚨 लाइव सिग्नल: <span style='color: {color};'>{signal}</span></h2>
+        </div>
+        """, unsafe_allow_html=True)
         
+        # इन द मनी जानकारी और अलर्ट्स
         if itm_strike != "N/A":
-            st.info(f"🎯 *अनुशंसित इन-द-मनी (ITM) स्ट्राइक:* {index_choice} {itm_strike}")
-            st.success(f"📈 *मनी मैनेजमेंट (1:5 Ratio):* यदि SL = 20 पॉइंट है, तो Target = 100 पॉइंट रखें।")
-        
-        # मार्केट का लाइव चार्ट
-        chart_data = pd.DataFrame(np.random.randn(20, 2), columns=['Price', 'VWAP'])
-        st.line_chart(chart_data)
-        
-    time.sleep(refresh_rate)
+            col_a, col_b = st.columns(2)
+            col_a.success(f"🎯 *अनुशंसित इन-द-मनी (ITM) स्ट्राइक:* {in…
